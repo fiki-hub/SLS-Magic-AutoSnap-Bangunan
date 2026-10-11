@@ -1,4 +1,4 @@
-name: Package QGIS plugin release
+name: Package QGIS plugin release and publish repository
 
 on:
   push:
@@ -34,8 +34,6 @@ jobs:
 
           package_name = "SLS_Magic_AutoSnap_Bangunan"
           output = Path(f"{package_name}_{os.environ.get('GITHUB_REF_NAME', 'v2.8.4')}.zip")
-          # Include only plugin runtime files. Avoid bundling test/data files,
-          # and never recursively include the ZIP being created.
           include_files = {
               "__init__.py",
               "autosnap.py",
@@ -62,7 +60,7 @@ jobs:
       - name: Upload ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SLS_Magic_AutoSnap_Bangunan_v2.8.4
+          name: SLS_Magic_AutoSnap_Bangunan_\${{ github.ref_name }}
           path: SLS_Magic_AutoSnap_Bangunan_*.zip
           if-no-files-found: error
           retention-days: 14
@@ -73,3 +71,92 @@ jobs:
         with:
           files: SLS_Magic_AutoSnap_Bangunan_*.zip
           generate_release_notes: true
+
+      - name: Generate QGIS plugins.xml from latest published release
+        env:
+          GH_TOKEN: \${{ github.token }}
+        run: |
+          mkdir -p qgis-repo
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          repo = "fiki-hub/SLS-Magic-AutoSnap-Bangunan"
+          req = urllib.request.Request(
+              f"https://api.github.com/repos/{repo}/releases/latest",
+              headers={"Accept": "application/vnd.github+json",
+                       "User-Agent": "SLS-Magic-QGIS-Repository",
+                       "Authorization": "Bearer " + os.environ["GH_TOKEN"]}
+          )
+          with urllib.request.urlopen(req, timeout=20) as response:
+              release = json.load(response)
+
+          assets = release.get("assets", [])
+          zip_asset = next((a for a in assets if a.get("name", "").lower().endswith(".zip")), None)
+          if not zip_asset:
+              raise SystemExit("Latest GitHub Release has no ZIP asset; cannot publish plugins.xml.")
+
+          metadata = {}
+          for line in Path("metadata.txt").read_text(encoding="utf-8").splitlines():
+              if "=" in line and not line.startswith("#"):
+                  key, value = line.split("=", 1)
+                  metadata[key.strip()] = value.strip()
+
+          root = ET.Element("plugins")
+          plugin = ET.SubElement(root, "pyqgis_plugin", {
+              "name": metadata.get("name", "SLS Magic AutoSnap Bangunan"),
+              "version": release.get("tag_name", "").lstrip("vV"),
+              "qgis_minimum_version": metadata.get("qgisMinimumVersion", "3.22"),
+              "qgis_maximum_version": "",
+              "download_url": zip_asset["browser_download_url"],
+              "uploaded_by": metadata.get("author", "SLS MAGIC"),
+              "create_date": release.get("published_at", ""),
+              "experimental": metadata.get("experimental", "False"),
+              "deprecated": metadata.get("deprecated", "False"),
+              "plugin_id": "SLS_Magic_AutoSnap_Bangunan",
+              "repository": f"https://github.com/{repo}",
+              "tracker": f"https://github.com/{repo}/issues",
+              "homepage": f"https://github.com/{repo}",
+              "category": metadata.get("category", "Vector"),
+          })
+          fields = {
+              "description": metadata.get("about", "SLS Magic AutoSnap Bangunan"),
+              "about": metadata.get("about", "SLS Magic AutoSnap Bangunan"),
+              "version": release.get("tag_name", "").lstrip("vV"),
+              "qgis_minimum_version": metadata.get("qgisMinimumVersion", "3.22"),
+              "file_name": zip_asset["name"],
+              "author_name": metadata.get("author", "SLS MAGIC"),
+              "email": metadata.get("email", ""),
+              "homepage": f"https://github.com/{repo}",
+              "tracker": f"https://github.com/{repo}/issues",
+              "repository": f"https://github.com/{repo}",
+              "downloads": "0",
+              "average_vote": "0",
+              "rating_votes": "0",
+              "trusted": "False",
+              "tags": "QGIS, SLS, AutoSnap, bangunan, georeference",
+              "changelog": release.get("body", ""),
+          }
+          for key, value in fields.items():
+              ET.SubElement(plugin, key).text = value
+          ET.indent(root, space="  ")
+          ET.ElementTree(root).write("qgis-repo/plugins.xml", encoding="utf-8", xml_declaration=True)
+          print("Generated qgis-repo/plugins.xml for release", release.get("tag_name"))
+          print("ZIP:", zip_asset["browser_download_url"])
+          PY
+          cat > qgis-repo/index.html <<'HTML'
+          <!doctype html><html lang="id"><meta charset="utf-8"><title>SLS Magic AutoSnap QGIS Plugin Repository</title>
+          <body><h1>SLS Magic AutoSnap Bangunan</h1><p>Repository plugin QGIS.</p>
+          <p><a href="plugins.xml">plugins.xml</a></p></body></html>
+          HTML
+
+      - name: Publish QGIS plugin repository to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: \${{ github.token }}
+          publish_branch: gh-pages
+          publish_dir: qgis-repo
+          force_orphan: true
