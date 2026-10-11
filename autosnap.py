@@ -2489,7 +2489,9 @@ class AutoSnapBangunanPlugin:
         dlg = PointAuditDialog(self.iface, self.iface.mainWindow())
         dlg.exec_()
     def unload(self):
-        if self.dialog:
+        """Release Qt widgets, map tools, menus and actions before QGIS removes the plugin."""
+        # Stop interactive tools and restore temporary layer filters first.
+        if self.dialog is not None:
             try:
                 self.dialog.stop_pick(restore=True)
             except Exception:
@@ -2498,14 +2500,50 @@ class AutoSnapBangunanPlugin:
                 self.dialog.restore_source_subset()
             except Exception:
                 pass
-        if self.action is not None:
-            self.iface.removeToolBarIcon(self.action)
-        if self.main_menu is not None:
             try:
-                self.iface.mainWindow().menuBar().removeAction(self.main_menu.menuAction())
+                self.dialog.close()
+                self.dialog.hide()
+                self.dialog.deleteLater()
             except Exception:
                 pass
-            self.main_menu.deleteLater()
+            self.dialog = None
+
+        main_window = self.iface.mainWindow()
+        if self.action is not None:
+            try:
+                self.iface.removeToolBarIcon(self.action)
+            except Exception:
+                pass
+            try:
+                main_window.removeAction(self.action)
+                self.action.deleteLater()
+            except Exception:
+                pass
+            self.action = None
+
+        # These actions were parented to the main window, so explicitly remove
+        # them; deleting only the QMenu can otherwise leave stale Qt objects.
+        for attr in ('manual_action', 'automatic_action', 'village_style_action',
+                     'style_action', 'audit_action', 'update_action'):
+            action = getattr(self, attr, None)
+            if action is not None:
+                try:
+                    main_window.removeAction(action)
+                    action.deleteLater()
+                except Exception:
+                    pass
+                setattr(self, attr, None)
+
+        if self.main_menu is not None:
+            try:
+                main_window.menuBar().removeAction(self.main_menu.menuAction())
+            except Exception:
+                pass
+            try:
+                self.main_menu.clear()
+                self.main_menu.deleteLater()
+            except Exception:
+                pass
         self.main_menu = None
         self.geotag_menu = None
         self.toolbox_menu = None
