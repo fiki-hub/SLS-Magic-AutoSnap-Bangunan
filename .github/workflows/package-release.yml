@@ -5,6 +5,7 @@ on:
     tags:
       - "v*"
     branches:
+      - "main"
       - "package-fix-v2.8.4"
   workflow_dispatch:
 
