@@ -1,0 +1,48 @@
+name: Package QGIS plugin release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Validate plugin metadata
+        run: |
+          test -f metadata.txt
+          test -f __init__.py
+          grep -E '^name=' metadata.txt
+          grep -E '^version=' metadata.txt
+
+      - name: Build installable ZIP
+        run: |
+          mkdir -p dist/SLS_Magic_AutoSnap_Bangunan
+          rsync -a ./ dist/SLS_Magic_AutoSnap_Bangunan/ \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude 'dist/' \
+            --exclude '__pycache__/' \
+            --exclude '*.pyc' \
+            --exclude '*.pyo' \
+            --exclude '.gitignore' \
+            --exclude 'CHANGELOG.md' \
+            --exclude '*.gpkg'
+          cd dist
+          zip -r ../SLS_Magic_AutoSnap_Bangunan_${GITHUB_REF_NAME}.zip SLS_Magic_AutoSnap_Bangunan
+          cd ..
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: SLS_Magic_AutoSnap_Bangunan_${{ github.ref_name }}.zip
+          generate_release_notes: true
