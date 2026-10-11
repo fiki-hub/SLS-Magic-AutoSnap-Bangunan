@@ -364,35 +364,10 @@ class AutoSnapDialog(QDialog):
         self._build_ui()
         self.refresh_layers()
 
-    def _toggle_maximize_restore(self):
-        if self.isMaximized():
-            self.showNormal()
-            if hasattr(self, 'btn_maximize'):
-                self.btn_maximize.setText('□')
-                self.btn_maximize.setToolTip('Maximize')
-        else:
-            self.showMaximized()
-            if hasattr(self, 'btn_maximize'):
-                self.btn_maximize.setText('❐')
-                self.btn_maximize.setToolTip('Restore')
-
     def _build_ui(self):
         root = QVBoxLayout(self); root.setContentsMargins(12,12,12,12); root.setSpacing(9)
-        # Neutral custom window controls; avoid the previous red control cluster.
-        window_bar = QHBoxLayout()
-        window_bar.addWidget(QLabel('<b>SLS MAGIC • AUTOSNAP BANGUNAN</b>'))
-        window_bar.addStretch(1)
-        self.btn_minimize = QPushButton('—'); self.btn_minimize.setToolTip('Minimize')
-        self.btn_maximize = QPushButton('□'); self.btn_maximize.setToolTip('Maximize / restore')
-        self.btn_close = QPushButton('×'); self.btn_close.setToolTip('Close')
-        _window_btn_style = 'QPushButton { background:#eef2f7; color:#263445; border:1px solid #cbd5e1; border-radius:5px; font-weight:bold; min-width:28px; max-width:28px; min-height:24px; max-height:24px; } QPushButton:hover { background:#dbeafe; border-color:#93c5fd; }'
-        for _btn in (self.btn_minimize, self.btn_maximize, self.btn_close):
-            _btn.setStyleSheet(_window_btn_style)
-            window_bar.addWidget(_btn)
-        self.btn_minimize.clicked.connect(self.showMinimized)
-        self.btn_maximize.clicked.connect(self._toggle_maximize_restore)
-        self.btn_close.clicked.connect(self.close)
-        root.addLayout(window_bar)
+        # Gunakan tombol jendela bawaan OS/QGIS di title bar; jangan gandakan
+        # tombol minimize, maximize, dan close di dalam dialog.
         title = QLabel('<b style="font-size:17px">✦  SLS MAGIC  /  AUTOSNAP BANGUNAN</b>'); root.addWidget(title)
         subtitle = QLabel('Pilih kode desa, lalu nama SLS. Peta dan tabel hanya menampilkan titik pada SLS aktif; klik noktah hitam pada raster untuk memindahkan titik.')
         subtitle.setWordWrap(True); root.addWidget(subtitle)
@@ -902,8 +877,30 @@ class AutoSnapDialog(QDialog):
                     rasters.append(layer)
         return rasters if rasters else fallback
 
+    def _georeference_group_label_for_layer(self, layer):
+        """Return the nearest named group inside the Georeference tree for a layer."""
+        try:
+            root = QgsProject.instance().layerTreeRoot()
+            node = root.findLayer(layer.id())
+            parent = node.parent() if node else None
+            georef_found = False
+            group_labels = []
+            while parent is not None and parent != root:
+                name = str(parent.name() or '').strip()
+                if 'georeference' in name.casefold():
+                    georef_found = True
+                    break
+                group_labels.append(name)
+                parent = parent.parent()
+            if not georef_found:
+                return layer.name()
+            # Prefer the immediate group name above the raster, e.g. the SLS group.
+            return group_labels[0] if group_labels and group_labels[0] else layer.name()
+        except Exception:
+            return layer.name()
+
     def _populate_georeference_raster_combos(self):
-        """Populate both raster selectors from valid rasters under the Georeference group only."""
+        """Populate selectors with SLS group names; each option still points to its raster layer."""
         rasters = self._rasters_in_georeference_group()
         for combo in (getattr(self, 'raster_sls_combo', None), getattr(self, 'raster_combo', None)):
             if combo is None:
@@ -911,17 +908,23 @@ class AutoSnapDialog(QDialog):
             old_id = combo.currentData()
             combo.blockSignals(True)
             combo.clear()
-            combo.addItem('Pilih raster dari Georeference…', None)
-            for layer in sorted(rasters, key=lambda lyr: lyr.name().casefold()):
-                combo.addItem(layer.name(), layer.id())
+            combo.addItem('Pilih grup SLS Georeference…', None)
+            used_labels = {}
+            for layer in sorted(rasters, key=lambda lyr: (self._georeference_group_label_for_layer(lyr).casefold(), lyr.name().casefold())):
+                group_label = self._georeference_group_label_for_layer(layer)
+                # If a group has multiple raster children, distinguish them without losing
+                # the group name used for SLS matching.
+                count = used_labels.get(group_label, 0)
+                used_labels[group_label] = count + 1
+                label = group_label if count == 0 else f'{group_label} — {layer.name()}'
+                combo.addItem(label, layer.id())
             idx = combo.findData(old_id) if old_id else -1
             if idx < 0 and rasters:
-                # Prefer currently visible raster, otherwise first available raster.
                 visible = next((r for r in rasters if self._layer_is_visible(r)), None)
                 idx = combo.findData(visible.id()) if visible else 1
             combo.setCurrentIndex(idx if idx >= 0 else 0)
             combo.setEnabled(True)
-            combo.setToolTip('Pilih layer yang berada di dalam grup Georeference. Layer raster diprioritaskan; jika tidak ada, layer valid dalam grup tetap dapat dipilih.')
+            combo.setToolTip('Pilihan menampilkan nama grup SLS di dalam grup Georeference; layer raster terkait akan diaktifkan.')
             combo.blockSignals(False)
 
     def _choose_georeference_raster(self, target='sls'):
@@ -1040,10 +1043,24 @@ class AutoSnapDialog(QDialog):
             if not rasters:
                 return
 
-            # Keep the current valid choice in both selectors. Do not auto-switch
-            # to a raster merely because its name resembles the selected SLS.
-            chosen_id = next((rid for rid in selected_ids
-                              if any(r.id() == rid for r in rasters)), None)
+            # Match the selected SLS against the actual group name in the QGIS
+            # Layers tree first; use the raster layer name only as a fallback.
+            wanted = self._normalize_raster_sls_name(sls_name)
+            chosen_id = None
+            if wanted:
+                for raster in rasters:
+                    group_name = self._normalize_raster_sls_name(self._georeference_group_label_for_layer(raster))
+                    if group_name == wanted:
+                        chosen_id = raster.id()
+                        break
+                if chosen_id is None:
+                    for raster in rasters:
+                        if self._normalize_raster_sls_name(raster.name()) == wanted:
+                            chosen_id = raster.id()
+                            break
+            if chosen_id is None:
+                chosen_id = next((rid for rid in selected_ids
+                                  if any(r.id() == rid for r in rasters)), None)
             if chosen_id:
                 for combo in (getattr(self, 'raster_sls_combo', None),
                               getattr(self, 'raster_combo', None)):
@@ -1053,6 +1070,7 @@ class AutoSnapDialog(QDialog):
                             combo.blockSignals(True)
                             combo.setCurrentIndex(idx)
                             combo.blockSignals(False)
+                self._set_georeference_raster_visible(chosen_id)
         except Exception as e:
             try:
                 self.status_label.setText(
