@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""SLS Magic AutoSnap Bangunan v2.7.3 - clickable georeference group/raster selector - menu UI and Excel audit export, code-only village selector, dependent SLS, filtered map, counts and enriched tables."""
+"""SLS Magic AutoSnap Bangunan v2.8.5 - georeference selector matches SLS group names - menu UI and Excel audit export, code-only village selector, dependent SLS, filtered map, counts and enriched tables."""
 import os, math, random, re, tempfile, shutil, json, urllib.request, urllib.error, webbrowser
 try:
     from .village_reference import VILLAGE_BY_CODE
@@ -331,7 +331,7 @@ class AutoSnapDialog(QDialog):
     def __init__(self, iface, parent=None):
         super().__init__(parent)
         self.iface = iface
-        self.setWindowTitle('SLS MAGIC  |  AutoSnap Bangunan  •  v2.8.3')
+        self.setWindowTitle('SLS MAGIC  |  AutoSnap Bangunan  •  v2.8.5')
         self.resize(1120, 760)
         self.setMinimumSize(680, 460)
         self.setSizeGripEnabled(True)
