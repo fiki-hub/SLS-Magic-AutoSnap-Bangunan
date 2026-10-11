@@ -630,13 +630,19 @@ class AutoSnapDialog(QDialog):
                         layer.updateFields()
                     layer.changeAttributeValue(best.id(), layer.fields().indexFromName(status_field), status)
                     layer.changeAttributeValue(best.id(), layer.fields().indexFromName(note_field), note)
+                    # Commit only edits started by this tool. If the layer was already in edit
+                    # mode, preserve the user's existing edit session and clearly report pending edits.
                     if started and not layer.commitChanges():
                         errors = '; '.join(layer.commitErrors())
                         layer.rollBack()
                         QMessageBox.warning(parent, 'Catatan Titik Bangunan', 'Gagal menyimpan perubahan: ' + errors)
                         return
+                    layer.updateFeature(best)
                     layer.triggerRepaint()
-                    QMessageBox.information(parent, 'Catatan Titik Bangunan', 'Catatan disimpan pada FID {}.'.format(best.id()))
+                    if started:
+                        QMessageBox.information(parent, 'Catatan Titik Bangunan', 'Catatan berhasil disimpan ke sumber data untuk FID {}.'.format(best.id()))
+                    else:
+                        QMessageBox.information(parent, 'Catatan Titik Bangunan', 'Catatan untuk FID {} sudah masuk ke edit buffer layer. Karena layer sudah dalam mode edit, klik Simpan Editan pada QGIS untuk menyimpan ke sumber data.'.format(best.id()))
                 except Exception as exc:
                     QMessageBox.warning(parent, 'Catatan Titik Bangunan', 'Gagal memilih/menyimpan titik: {}'.format(exc))
         self._note_pick_tool = NotePickTool(canvas)
@@ -2382,19 +2388,76 @@ class AutoSnapBangunanPlugin:
         self.iface.mainWindow().menuBar().addMenu(self.main_menu)
 
     def check_github_update(self):
-        """Check the repository's latest GitHub release; opening the release page is user-confirmed."""
+        """Check latest published release and offer a safe staged install."""
         api = 'https://api.github.com/repos/fiki-hub/SLS-Magic-AutoSnap-Bangunan/releases/latest'
+        releases_url = 'https://github.com/fiki-hub/SLS-Magic-AutoSnap-Bangunan/releases'
         try:
             req = urllib.request.Request(api, headers={'User-Agent': 'SLS-Magic-AutoSnap-Bangunan', 'Accept': 'application/vnd.github+json'})
-            with urllib.request.urlopen(req, timeout=8) as response:
+            with urllib.request.urlopen(req, timeout=12) as response:
                 release = json.loads(response.read().decode('utf-8'))
-            tag = str(release.get('tag_name') or 'versi tidak diketahui')
-            url = str(release.get('html_url') or 'https://github.com/fiki-hub/SLS-Magic-AutoSnap-Bangunan/releases')
-            QMessageBox.information(self.iface.mainWindow(), 'Update GitHub', 'Rilis terbaru: {}\n\nHalaman rilis akan dibuka agar Anda dapat memeriksa ZIP dan catatan perubahannya. Pembaruan otomatis belum diterapkan; tutup QGIS sebelum mengganti file plugin.'.format(tag))
-            webbrowser.open(url)
+            tag = str(release.get('tag_name') or '')
+            assets = release.get('assets') or []
+            zip_asset = next((a for a in assets if str(a.get('name','')).lower().endswith('.zip')), None)
+            if not tag:
+                QMessageBox.information(self.iface.mainWindow(), 'Update GitHub',
+                    'Belum ada GitHub Release yang diterbitkan. Source repository tersedia, tetapi update otomatis memerlukan ZIP pada GitHub Releases.\\n\\nBuka halaman Releases untuk melihat statusnya.')
+                webbrowser.open(releases_url)
+                return
+            current = '2.8.4'
+            remote = tag.lstrip('vV')
+            if remote == current:
+                QMessageBox.information(self.iface.mainWindow(), 'Update GitHub', 'Plugin sudah menggunakan versi {}.'.format(current))
+                return
+            if not zip_asset or not zip_asset.get('browser_download_url'):
+                QMessageBox.warning(self.iface.mainWindow(), 'Update GitHub', 'Rilis {} belum memiliki aset ZIP. Tidak ada file yang diubah. Unggah ZIP plugin ke GitHub Releases terlebih dahulu.'.format(tag))
+                webbrowser.open(releases_url)
+                return
+            answer = QMessageBox.question(self.iface.mainWindow(), 'Update GitHub',
+                'Versi rilis tersedia: {}\\nVersi saat ini: {}\\n\\nUnduh dan siapkan update? QGIS perlu ditutup lalu dibuka kembali agar modul baru dimuat.'.format(tag, current),
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if answer != QMessageBox.Yes:
+                return
+            plugin_dir = os.path.dirname(os.path.abspath(__file__))
+            parent_dir = os.path.dirname(plugin_dir)
+            stage = tempfile.mkdtemp(prefix='slsmagic_update_', dir=parent_dir)
+            archive_path = os.path.join(stage, 'release.zip')
+            req = urllib.request.Request(zip_asset['browser_download_url'], headers={'User-Agent': 'SLS-Magic-AutoSnap-Bangunan'})
+            with urllib.request.urlopen(req, timeout=45) as response, open(archive_path, 'wb') as out:
+                shutil.copyfileobj(response, out)
+            import zipfile
+            with zipfile.ZipFile(archive_path, 'r') as archive:
+                names = archive.namelist()
+                roots = set(n.split('/')[0] for n in names if '/' in n)
+                if not names or len(roots) != 1:
+                    raise ValueError('Struktur ZIP tidak sesuai: harus berisi satu folder plugin utama.')
+                root_name = next(iter(roots))
+                archive.extractall(stage)
+            extracted = os.path.join(stage, root_name)
+            if not os.path.isfile(os.path.join(extracted, 'metadata.txt')) or not os.path.isfile(os.path.join(extracted, '__init__.py')):
+                raise ValueError('ZIP tidak memuat metadata.txt dan __init__.py di folder utama.')
+            pending = plugin_dir + '_update_pending'
+            backup = plugin_dir + '_backup'
+            if os.path.exists(pending):
+                shutil.rmtree(pending, ignore_errors=True)
+            shutil.copytree(extracted, pending, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+            # Do not replace loaded Python modules while QGIS is running. Stage the new
+            # package and a helper BAT; user can close QGIS and run it to swap directories.
+            bat_path = os.path.join(stage, 'apply_update.bat')
+            with open(bat_path, 'w', encoding='utf-8') as bat:
+                bat.write('@echo off\\r\\n')
+                bat.write('echo Close QGIS before applying this update.\\r\\n')
+                bat.write('if exist "{}" rmdir /s /q "{}"\\r\\n'.format(backup, backup))
+                bat.write('if exist "{}" move "{}" "{}"\\r\\n'.format(plugin_dir, plugin_dir, backup))
+                bat.write('move "{}" "{}"\\r\\n'.format(pending, plugin_dir))
+                bat.write('echo Update staged. Reopen QGIS and verify the plugin.\\r\\n')
+                bat.write('pause\\r\\n')
+            QMessageBox.information(self.iface.mainWindow(), 'Update disiapkan',
+                'Paket {} sudah diunduh dan divalidasi.\\n\\n1. Tutup QGIS sepenuhnya.\\n2. Jalankan apply_update.bat di folder: {}\\n3. Buka QGIS kembali.\\n\\nFolder cadangan dibuat sebagai {}.'.format(tag, stage, backup))
+            os.startfile(stage)
         except Exception as exc:
-            QMessageBox.warning(self.iface.mainWindow(), 'Update GitHub', 'Tidak dapat memeriksa rilis GitHub. Periksa koneksi internet atau buka repository secara manual.\n\nDetail: {}'.format(exc))
-            webbrowser.open('https://github.com/fiki-hub/SLS-Magic-AutoSnap-Bangunan/releases')
+            QMessageBox.warning(self.iface.mainWindow(), 'Update GitHub',
+                'Update tidak diterapkan dan file aktif tidak diganti. Detail: {}'.format(exc))
+            webbrowser.open(releases_url)
 
     def open_audit(self):
         dlg = PointAuditDialog(self.iface, self.iface.mainWindow())
