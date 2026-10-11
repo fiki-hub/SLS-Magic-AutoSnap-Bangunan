@@ -61,7 +61,7 @@ jobs:
       - name: Upload ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SLS_Magic_AutoSnap_Bangunan_\${{ github.ref_name }}
+          name: SLS_Magic_AutoSnap_Bangunan_${{ github.ref_name }}
           path: SLS_Magic_AutoSnap_Bangunan_*.zip
           if-no-files-found: error
           retention-days: 14
@@ -75,7 +75,7 @@ jobs:
 
       - name: Generate QGIS plugins.xml from latest published release
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p qgis-repo
           python - <<'PY'
@@ -157,7 +157,7 @@ jobs:
       - name: Publish QGIS plugin repository to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
-          github_token: \${{ github.token }}
+          github_token: ${{ github.token }}
           publish_branch: gh-pages
           publish_dir: qgis-repo
           force_orphan: true
