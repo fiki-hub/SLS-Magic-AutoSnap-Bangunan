@@ -251,7 +251,7 @@ class GeoreferenceConvertDialog(QDialog):
                         shutil.copy2(chosen, temporary_aux)
                 ok, crs = self._export_dataset(png, output, gdal)
                 QMessageBox.information(self, 'Konversi selesai',
-                    f'GeoTIFF berhasil dibuat:\\n{output}\\nCRS terdeteksi: {crs or "tidak ada"}\\n\\nPeriksa CRS dan posisi layer sebelum digunakan.')
+                    f'GeoTIFF berhasil dibuat:\n{output}\nCRS terdeteksi: {crs or "tidak ada"}\n\nPeriksa CRS dan posisi layer sebelum digunakan.')
             except Exception as e:
                 QMessageBox.critical(self, 'Konversi gagal', f'{type(e).__name__}: {e}')
             finally:
@@ -295,9 +295,9 @@ class GeoreferenceConvertDialog(QDialog):
                     errors.append(f'{layer.name()}: {e}')
             message = f'Berhasil ekspor {len(successes)} dari {len(layers)} raster.'
             if successes:
-                message += '\\n\\n' + '\\n'.join(successes[:8])
+                message += '\n\n' + '\n'.join(successes[:8])
             if errors:
-                message += '\\n\\nGagal:\\n' + '\\n'.join(errors[:8])
+                message += '\n\nGagal:\n' + '\n'.join(errors[:8])
             QMessageBox.information(self, 'Ekspor grup selesai', message)
         except Exception as e:
             QMessageBox.critical(self, 'Ekspor grup gagal', f'{type(e).__name__}: {e}')
@@ -1873,7 +1873,7 @@ class AutoSnapDialog(QDialog):
             import traceback
             details = traceback.format_exc()
             self.status_label.setText(f'Pencocokan nomor gagal: {type(e).__name__}: {e}')
-            QMessageBox.critical(self, 'Pencocokan nomor gagal', f'{type(e).__name__}: {e}\\n\\nDetail teknis:\\n{details[-1800:]}')
+            QMessageBox.critical(self, 'Pencocokan nomor gagal', f'{type(e).__name__}: {e}\n\nDetail teknis:\n{details[-1800:]}')
         finally:
             try:
                 QApplication.restoreOverrideCursor()
@@ -2400,10 +2400,18 @@ class AutoSnapBangunanPlugin:
             zip_asset = next((a for a in assets if str(a.get('name','')).lower().endswith('.zip')), None)
             if not tag:
                 QMessageBox.information(self.iface.mainWindow(), 'Update GitHub',
-                    'Belum ada GitHub Release yang diterbitkan. Source repository tersedia, tetapi update otomatis memerlukan ZIP pada GitHub Releases.\\n\\nBuka halaman Releases untuk melihat statusnya.')
+                    'Belum ada GitHub Release yang diterbitkan. Source repository tersedia, tetapi update otomatis memerlukan ZIP pada GitHub Releases.\n\nBuka halaman Releases untuk melihat statusnya.')
                 webbrowser.open(releases_url)
                 return
-            current = '2.8.4'
+            current = 'unknown'
+            try:
+                with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metadata.txt'), 'r', encoding='utf-8') as meta_file:
+                    for meta_line in meta_file:
+                        if meta_line.lower().startswith('version='):
+                            current = meta_line.split('=', 1)[1].strip()
+                            break
+            except Exception:
+                pass
             remote = tag.lstrip('vV')
             if remote == current:
                 QMessageBox.information(self.iface.mainWindow(), 'Update GitHub', 'Plugin sudah menggunakan versi {}.'.format(current))
@@ -2413,7 +2421,7 @@ class AutoSnapBangunanPlugin:
                 webbrowser.open(releases_url)
                 return
             answer = QMessageBox.question(self.iface.mainWindow(), 'Update GitHub',
-                'Versi rilis tersedia: {}\\nVersi saat ini: {}\\n\\nUnduh dan siapkan update? QGIS perlu ditutup lalu dibuka kembali agar modul baru dimuat.'.format(tag, current),
+                'Versi rilis tersedia: {}\nVersi saat ini: {}\n\nUnduh dan siapkan update? QGIS perlu ditutup lalu dibuka kembali agar modul baru dimuat.'.format(tag, current),
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
             if answer != QMessageBox.Yes:
                 return
@@ -2452,7 +2460,7 @@ class AutoSnapBangunanPlugin:
                 bat.write('echo Update staged. Reopen QGIS and verify the plugin.\r\n')
                 bat.write('pause\r\n')
             QMessageBox.information(self.iface.mainWindow(), 'Update disiapkan',
-                'Paket {} sudah diunduh dan divalidasi.\\n\\n1. Tutup QGIS sepenuhnya.\\n2. Jalankan apply_update.bat di folder: {}\\n3. Buka QGIS kembali.\\n\\nFolder cadangan dibuat sebagai {}.'.format(tag, stage, backup))
+                'Paket {} sudah diunduh dan divalidasi.\n\n1. Tutup QGIS sepenuhnya.\n2. Jalankan apply_update.bat di folder: {}\n3. Buka QGIS kembali.\n\nFolder cadangan dibuat sebagai {}.'.format(tag, stage, backup))
             os.startfile(stage)
         except Exception as exc:
             QMessageBox.warning(self.iface.mainWindow(), 'Update GitHub',
