@@ -30,25 +30,32 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           from zipfile import ZipFile, ZIP_DEFLATED
-          root = Path(".")
+          import os
+
           package_name = "SLS_Magic_AutoSnap_Bangunan"
-          output = Path(f"{package_name}_{__import__('os').environ.get('GITHUB_REF_NAME', 'v2.8.4')}.zip")
-          excluded_dirs = {".git", ".github", "__pycache__", "dist"}
-          excluded_files = {".gitignore", "CHANGELOG.md"}
+          output = Path(f"{package_name}_{os.environ.get('GITHUB_REF_NAME', 'v2.8.4')}.zip")
+          # Include only plugin runtime files. Avoid bundling test/data files,
+          # and never recursively include the ZIP being created.
+          include_files = {
+              "__init__.py",
+              "autosnap.py",
+              "metadata.txt",
+              "icon.svg",
+              "village_reference.py",
+              "README.txt",
+          }
+
           with ZipFile(output, "w", ZIP_DEFLATED) as z:
-              for p in root.rglob("*"):
-                  if not p.is_file():
-                      continue
-                  rel = p.relative_to(root)
-                  if any(part in excluded_dirs for part in rel.parts):
-                      continue
-                  if p.name in excluded_files or p.suffix in {".pyc", ".pyo"}:
-                      continue
-                  z.write(p, Path(package_name) / rel)
+              for name in sorted(include_files):
+                  p = Path(name)
+                  if p.is_file():
+                      z.write(p, Path(package_name) / name)
+
           with ZipFile(output) as z:
-              names = z.namelist()
+              names = set(z.namelist())
               assert f"{package_name}/metadata.txt" in names
               assert f"{package_name}/__init__.py" in names
+              assert f"{package_name}/autosnap.py" in names
           print(f"Created {output} ({output.stat().st_size} bytes)")
           PY
 
