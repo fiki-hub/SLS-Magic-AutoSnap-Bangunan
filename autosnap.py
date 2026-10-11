@@ -2444,13 +2444,13 @@ class AutoSnapBangunanPlugin:
             # package and a helper BAT; user can close QGIS and run it to swap directories.
             bat_path = os.path.join(stage, 'apply_update.bat')
             with open(bat_path, 'w', encoding='utf-8') as bat:
-                bat.write('@echo off\\r\\n')
-                bat.write('echo Close QGIS before applying this update.\\r\\n')
-                bat.write('if exist "{}" rmdir /s /q "{}"\\r\\n'.format(backup, backup))
-                bat.write('if exist "{}" move "{}" "{}"\\r\\n'.format(plugin_dir, plugin_dir, backup))
-                bat.write('move "{}" "{}"\\r\\n'.format(pending, plugin_dir))
-                bat.write('echo Update staged. Reopen QGIS and verify the plugin.\\r\\n')
-                bat.write('pause\\r\\n')
+                bat.write('@echo off\r\n')
+                bat.write('echo Close QGIS before applying this update.\r\n')
+                bat.write('if exist "{}" rmdir /s /q "{}"\r\n'.format(backup, backup))
+                bat.write('if exist "{}" move "{}" "{}"\r\n'.format(plugin_dir, plugin_dir, backup))
+                bat.write('move "{}" "{}"\r\n'.format(pending, plugin_dir))
+                bat.write('echo Update staged. Reopen QGIS and verify the plugin.\r\n')
+                bat.write('pause\r\n')
             QMessageBox.information(self.iface.mainWindow(), 'Update disiapkan',
                 'Paket {} sudah diunduh dan divalidasi.\\n\\n1. Tutup QGIS sepenuhnya.\\n2. Jalankan apply_update.bat di folder: {}\\n3. Buka QGIS kembali.\\n\\nFolder cadangan dibuat sebagai {}.'.format(tag, stage, backup))
             os.startfile(stage)
