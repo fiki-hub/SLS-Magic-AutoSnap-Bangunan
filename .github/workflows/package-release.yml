@@ -34,7 +34,7 @@ jobs:
             --exclude '*.pyc' \
             --exclude '*.pyo' \
             --exclude '.gitignore' \
-            --exclude 'CHANGELOG.md' \
+            --exclude 'CHANGELOG.md'
           cd dist
           zip -r ../SLS_Magic_AutoSnap_Bangunan_${GITHUB_REF_NAME}.zip SLS_Magic_AutoSnap_Bangunan
           cd ..
