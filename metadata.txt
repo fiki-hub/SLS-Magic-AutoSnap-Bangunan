@@ -1,0 +1,12 @@
+[general]
+name=SLS Magic AutoSnap Bangunan
+qgisMinimumVersion=3.22
+Workflow hierarkis: pilih kode desa saja dari level_6_full_code, lalu nama SLS asli dari level_6_name. Tabel menampilkan FID, no_bang, kode desa, nama SLS, flag dan status; tombol menghitung total titik pada SLS aktif. Tabel, pemindaian, layer hasil, dan tampilan peta difilter ke SLS terpilih; filter sumber dipulihkan saat dialog ditutup.
+version=2.8.3
+author=SLS MAGIC
+email=
+about=Versi 2.8.3 memperbaiki Catatan Titik Bangunan dengan toleransi klik dan pembuatan kolom catatan otomatis pada layer yang dapat diedit; kontrol jendela memakai warna netral dan menu Cek Update GitHub memeriksa rilis terbaru. Fitur sebelumnya tetap tersedia. Versi 2.8.2 menyertakan layer titik KdKec_3210200.gpkg sebagai acuan bawaan Titik Pusat BPS. Layer acuan otomatis dimuat bila belum ada; dropdown tetap bisa dipilih manual. Memindahkan titik bangunan secara manual atau melalui kandidat raster. Fitur flag=1 dapat di-zoom otomatis; setelah target diedit, flag pada layer hasil menjadi 0. Peta sumber difilter sementara sehingga hanya titik pada kode desa + SLS aktif yang terlihat. Menyimpan output AutoSnap permanen ke GeoPackage. Antarmuka diperbarui dengan tata letak modern, menu utama langsung, panel metrik, tab dan tabel yang lebih jelas. Raster georeference dapat dipilih secara manual melalui dropdown Raster SLS atau tombol Choose; raster terpilih dicentang dan raster georeference lain dilepas centangnya; pilihan otomatis dicocokkan berdasarkan nama SLS dan akhiran _WSS diabaikan dan visibilitas awal dipulihkan saat dialog ditutup. Menyediakan menu Audit Laporan Titik untuk memilih layer acuan dan group/layer pekerjaan. Sumber tidak ditimpa. Load Style memakai hijau seragam; setiap layer output memakai satu warna berbeda per layer, bukan per FID. Label no_bang putih tebal berbuffer hitam.
+category=Vector
+icon=icon.svg
+experimental=False
+deprecated=False
